@@ -1,0 +1,23 @@
+#!/usr/bin/env node
+
+const bc = require('./index.js');
+var [node, file, ...ls] = process.argv
+
+var main = async () => {
+    try {
+        await bc.start()
+        var countries = await bc.countries()
+
+        if (ls.length == 0) ls = countries.keys()
+        for (var k in ls) {
+            console.error('[' + ls[k] + ']')
+            var res = await bc.banks(ls[k])
+            if (process.argv.length > 2)
+                console.log(res)
+        }
+    } finally {
+        bc.stop()
+    }
+}
+
+main()
