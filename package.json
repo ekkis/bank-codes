@@ -22,7 +22,7 @@
     "url": "https://github.com/ekkis/bank-codes.git"
   },
   "dependencies": {
-    "js-prototype-lib": "^1.29.15",
+    "js-prototype-lib": "^1.29.21",
     "puppeteer": "^19.4.1"
   },
   "devDependencies": {

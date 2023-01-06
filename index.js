@@ -32,7 +32,7 @@ var self = module.exports = {
 	get: async (url, handler) => {
 		var page = self.page || await self.start()
 		console.error(url)
-		await page.goto(url)
+		await page.goto(url, {waitUntil: 'load', timeout: 0})
 		return await page.evaluate(handler)
 	},
 	countries: async () => {
@@ -57,33 +57,43 @@ var self = module.exports = {
 		var ret = self.cache.load(key)
 		if (ret && ret[country]) return ret[country]
 
-		self.cache.setpath(`${key}/${country}`, [])
-		async function get_page(url) {
-			var res = await self.get(url, () => {
-				var data = []
-				ls = document.querySelectorAll('.swift-country tr')
-				for (var i = 1; i < ls.length; i++) {
-					var o = ls[i].childNodes
-					data.push({
-						Name: o[1].innerHTML,
-						City: o[2].innerHTML,
-						Branch: o[3].innerHTML,
-						SWIFT: o[4].childNodes[0].innerHTML
-					})
-				}
-				var next = document.querySelector('.next')
-				next = next.children.length > 0 && next.children[0].href
-				return {data, next}
+		async function get_bank(url) {
+			return await self.get(url, () => {
+				var t = document.querySelector('table')
+				var tr = t.children[1].children
+				return Array.from(tr).map(o => o.children[1].innerHTML)
 			})
-			self.cache[key][country].push(... res.data)
-			return res.next
 		}
+		async function get_list(url) {
+			var {urls, next} = await self.get(url, () => {
+				var urls = document.querySelectorAll('.swift-country tr a')
+				var next = document.querySelector('.next')
+				urls = Array.from(urls).map(o => o.href)
+				next = next.children.length > 0 && next.children[0].href
+				return {urls, next}
+			})
+			for (var i = 0; i < urls.length; i++) {
+				var r = await get_bank(urls[i])
+				// this patch handles variations in the structure of the page
+				var m = r[0].match(/data-clipboard-text="(\S+)"/)
+				if (m) { r[0] = m[1]; r.splice(1,2) }
+
+				// create dictionary and attach it to output
+				var o = r.dict('SWIFT/Name/Address/City/Branch/PostCode').tc()
+				if (process.env.DEBUG) console.error(o)
+				r = self.cache.setpath([key, country, o.Name, o.City], [], true) 
+				r.push(o.slice('Branch/Address/PostCode/SWIFT'))
+			}
+			return next
+		}
+
 		var next = www + '/swift-code/' + country.lc().tr(' ', '-')
+		if (country.startsWith('http')) next = country
 		while (next) {
-			next = await get_page(next)
+			next = await get_list(next)
+			self.cache.save()
 		}
-		self.cache.save()
-		return self.cache[key]
+		return self.cache[key][country]
 	}
 }
 
